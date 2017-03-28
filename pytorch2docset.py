@@ -6,7 +6,7 @@
 Dependency:
 - requests
 - BeautifulSoup4
-- httrack
+- httrack (to download html documentation. Well, website mirroring)
 """
 
 try:
@@ -22,19 +22,19 @@ from bs4 import BeautifulSoup
 
 
 class Docset(object):
-    def __init__(self, name, website, pages, icon_url):
+    def __init__(self, name, website, pages, icon_url, download_html=False):
         self.name = name
         self.website = website
         self.pages = pages
         self.docset_name = '{}.docset'.format(self.name)
-        self.setup_docset()
+        self.setup_docset(download_html)
         self.add_infoplist()
         self.cur, self.db = self.connect_db()
         self.scrape_urls()
         self.report()
         retrieve(icon_url, self.docset_name + "/icon.png")
 
-    def setup_docset(self, download_html=False):
+    def setup_docset(self, download_html):
 
         output = self.docset_name + '/Contents/Resources/Documents/'
         if not os.path.exists(output):
@@ -45,16 +45,18 @@ class Docset(object):
             rm -rf hts-* &&
             mkdir -p Contents/Resources/Documents &&
             mv -f *.* Contents/Resources/Documents/
-            """.format(self.docset_name, self.website)
+            """.format(self.docset_name, self.website.replace('/docs/', ''))
         if download_html:
             os.system(cmd)
 
     def connect_db(self):
         db = sqlite3.connect(self.docset_name + '/Contents/Resources/docSet.dsidx')
         cursor = db.cursor()
-        cursor.execute('DROP TABLE searchIndex;')
-        cursor.execute('CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);')
-        cursor.execute('CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);')
+        try:
+            cursor.execute('DROP TABLE searchIndex;')
+        except sqlite3.OperationalError:
+            cursor.execute('CREATE TABLE searchIndex(id INTEGER PRIMARY KEY, name TEXT, type TEXT, path TEXT);')
+            cursor.execute('CREATE UNIQUE INDEX anchor ON searchIndex (name, type, path);')
         return cursor, db
 
     def scrape_urls(self):
@@ -124,4 +126,4 @@ if __name__ == '__main__':
     }
     icon = 'https://avatars2.githubusercontent.com/u/21003710?v=3&s=200'
 
-    Docset(name, index_page, entry_pages, icon_url=icon)
+    Docset(name, index_page, entry_pages, icon_url=icon, download_html=True)
