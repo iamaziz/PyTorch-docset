@@ -9,10 +9,6 @@ Dependency:
 - httrack (to download html documentation. Well, website mirroring)
 """
 
-try:
-    from urllib import urlretrieve as retrieve
-except ImportError:
-    from urllib.request import urlretrieve as retrieve
 import sqlite3
 import os
 import plistlib
@@ -22,30 +18,31 @@ from bs4 import BeautifulSoup
 
 
 class Docset(object):
-    def __init__(self, name, website, pages, icon_url, download_html=False):
-        self.name = name
-        self.website = website
+    def __init__(self, docset_name, index_page, pages, icon_url, html_url, download_html=False):
+        self.name = docset_name
+        self.index_page = index_page
         self.pages = pages
+        self.docs_output = None
         self.docset_name = '{}.docset'.format(self.name)
-        self.setup_docset(download_html)
+        self.setup_docset(html_url, download_html)
         self.add_infoplist()
         self.cur, self.db = self.connect_db()
         self.scrape_urls()
+        self.get_icon(icon_url)
         self.report()
-        retrieve(icon_url, self.docset_name + "/icon.png")
 
-    def setup_docset(self, download_html):
+    def setup_docset(self, url, download_html):
 
-        output = self.docset_name + '/Contents/Resources/Documents/'
-        if not os.path.exists(output):
-            os.makedirs(output)
+        self.docs_output = self.docset_name + '/Contents/Resources/Documents/'
+        if not os.path.exists(self.docs_output):
+            os.makedirs(self.docs_output)
         cmd = """
             cd {0} &&
-            httrack -%v2 -T60 -R99 --sockets=7 -%c1000 -c10 -A999999999 -%N0 --disable-security-limits -F 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/535.19 (KHTML, like Gecko) Ubuntu/11.10 Chromium/18.0.1025.168' --mirror --keep-alive --robots=0 "{1}" -n -* +*.css +*css.php +*.ico +*/fonts/* +*.svg +*.ttf +fonts.googleapis.com* +*.woff +*.eot +*.png +*.jpg +*.gif +*.jpeg +*.js +{1}* -github.com* +raw.github.com* &&
+            httrack -%v2 -T60 -R99 --sockets=7 -%c1000 -c10 -A999999999 -%N0 --disable-security-limits --keep-links=K4 -F 'Mozilla/5.0 (X11; Linux i686) AppleWebKit/535.19 (KHTML, like Gecko) Ubuntu/11.10 Chromium/18.0.1025.168' --mirror --keep-alive --robots=0 "{1}" -n -* +*.css +*css.php +*.ico +*/fonts/* +*.svg +*.ttf +fonts.googleapis.com* +*.woff +*.eot +*.png +*.jpg +*.gif +*.jpeg +*.js +{1}* -github.com* +raw.github.com* &&
             rm -rf hts-* &&
             mkdir -p Contents/Resources/Documents &&
             mv -f *.* Contents/Resources/Documents/
-            """.format(self.docset_name, self.website.replace('/docs/', ''))
+            """.format(self.docset_name, url)
         if download_html:
             os.system(cmd)
 
@@ -61,22 +58,23 @@ class Docset(object):
 
     def scrape_urls(self):
 
-        idx = (i + j for i in string.lowercase for j in string.lowercase)
+        idx = (i + j for i in string.ascii_lowercase for j in string.ascii_lowercase)
         pages = self.pages
-        for p in pages:
+        for entry_type in pages:
             # base path of current page
-            base_path = pages[p].split("//")[1]
+            base_path = pages[entry_type].split("//")[1]
             # soup each page
-            html = requests.get(pages[p]).text
+            html = requests.get(pages[entry_type]).text
             soup = BeautifulSoup(html, 'html.parser')
             # find href and populate entries to db
             for a in soup.findAll('a', class_='reference internal'):
                 entry_name = a.text.strip()
                 path = a.get('href')
-                if p == 'Guide':
+                if entry_type == 'Guide':
                     entry_name = '{}: {}'.format(idx.next(), entry_name.encode('ascii', 'ignore'))
                 path = base_path + path
-                self.update_db(entry_name, p, path)
+                entry_name = entry_name.encode('ascii', 'ignore')
+                self.update_db(entry_name, entry_type, path)
 
     def update_db(self, entry_name, typ, path):
 
@@ -93,7 +91,7 @@ class Docset(object):
 
     def add_infoplist(self):
 
-        index_file = self.website.split("//")[1]
+        index_file = self.index_page.split("//")[1]
         plist_path = os.path.join(self.docset_name, "Contents", "Info.plist")
         plist_cfg = {
             'CFBundleIdentifier': self.name,
@@ -110,20 +108,39 @@ class Docset(object):
 
         self.cur.execute('SELECT count(*) FROM searchIndex;')
         entry = self.cur.fetchone()
-        print("{} entry.".format(entry))
         # commit and close db
         self.db.commit()
         self.db.close()
+        self.compress_docset()
+        print("{} entry.".format(entry))
+
+    def get_icon(self, png_url):
+        """grab icon and resize to 32x32 and 16x16 pixel"""
+        cmd = """
+        wget -O icon.png {} &&
+        cp icon.png {}/icon.png &&
+        cp icon.png icon@2x.png &&
+        sips -z 32 32 icon@2x.png &&
+        sips -z 16 16 icon.png
+        """.format(png_url, self.docset_name)
+        os.system(cmd)
+
+    def compress_docset(self):
+        """compress the docset as .tgz file"""
+        cmd = """
+        tar --exclude='.DS_Store' -cvzf {0}.tgz {0}.docset
+        """.format(self.docset_name.replace('.docset', ''))
+        os.system(cmd)
 
 
 if __name__ == '__main__':
-
     name = 'PyTorch'
-    index_page = 'http://pytorch.org/docs/'
+    download_url = 'http://pytorch.org/'
+    index_page = 'http://pytorch.org/docs/index.html'
     entry_pages = {
         'func': 'http://pytorch.org/docs/',
         'Guide': 'http://pytorch.org/tutorials/'
     }
-    icon = 'https://avatars2.githubusercontent.com/u/21003710?v=3&s=200'
+    icon = 'https://avatars2.githubusercontent.com/u/21003710'
 
-    Docset(name, index_page, entry_pages, icon_url=icon, download_html=True)
+    Docset(name, index_page, entry_pages, icon, download_url, download_html=True)
