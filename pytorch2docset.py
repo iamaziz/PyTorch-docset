@@ -138,7 +138,7 @@ if __name__ == '__main__':
     download_url = 'http://pytorch.org/'
     index_page = 'http://pytorch.org/docs/index.html'
     entry_pages = {
-        'func': 'http://pytorch.org/docs/',
+        'func': 'http://pytorch.org/docs/master/',
         'Guide': 'http://pytorch.org/tutorials/'
     }
     icon = 'https://avatars2.githubusercontent.com/u/21003710'

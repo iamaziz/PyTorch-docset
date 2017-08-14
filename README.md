@@ -2,7 +2,7 @@
 
 # PyTorch Docset
 
-Generate a docset for PyTorch [documentation (0.1.11)](http://pytorch.org/docs/) and [tutorials](http://pytorch.org/tutorials/).
+Generate a docset for PyTorch [documentation (0.2.0)](http://pytorch.org/docs/) and [tutorials](http://pytorch.org/tutorials/).
 
 
 The docset is available for download in [Dash](https://kapeli.com/dash) under **User Contributed**:
